@@ -218,3 +218,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Data files are shared via Google Drive, not GitHub
+data/
+Data_cleaning_export/
+*.zip
+.DS_Store
