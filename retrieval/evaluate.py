@@ -36,3 +36,4 @@ def evaluate(search_fn, index, questions, k=10):
             row["rr"] = reciprocal_rank(retrieved, gold)
         rows.append(row)
     return pd.DataFrame(rows)
+
