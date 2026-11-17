@@ -1,0 +1,11 @@
+{
+  "corpus": "kaggle_demo",
+  "source_file": "kaggle_reviews_test.csv",
+  "firm": "Deloitte",
+  "model": "sentence-transformers/all-MiniLM-L6-v2",
+  "n_reviews": 4229,
+  "n_passages": 8508,
+  "dims": 384,
+  "max_words": 150,
+  "overlap_words": 30
+}

@@ -1,0 +1,10 @@
+{
+  "corpus": "brightdata_eval",
+  "source_file": "brightdata_recent_clean_Reviews.csv",
+  "model": "sentence-transformers/all-MiniLM-L6-v2",
+  "n_reviews": 431,
+  "n_passages": 1058,
+  "dims": 384,
+  "max_words": 150,
+  "overlap_words": 30
+}
