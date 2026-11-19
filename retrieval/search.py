@@ -8,6 +8,7 @@ from rank_bm25 import BM25Okapi
 from sentence_transformers import SentenceTransformer
 from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS
 from nltk.stem import PorterStemmer
+from .build_index import job_level
 
 
 
@@ -38,6 +39,7 @@ def load_index(index_dir):
         info = json.load(f)
 
     passages = pd.read_parquet(index_dir / "passages.parquet")
+    passages["job_level"] = passages["job_title"].map(job_level)
 
     return {
         "passages": passages,
@@ -101,5 +103,34 @@ def hybrid_search(index, query, k=5, field=None, filters=None, candidates=50, rr
     results = index["passages"][index["passages"]["passage_id"].isin(fused)].copy()
     results["score"] = results["passage_id"].map(fused)
     return results.sort_values("score", ascending=False).head(k)
+
+
+MIN_GROUP_SIZE = 5
+def group_size(index, filters=None):
+    """Number of unique reviews in the group defined by filters."""
+    group = index["passages"]
+    for col, value in (filters or {}).items():
+        group = group[group[col] == value]
+    return group["review_id"].nunique()
+
+def safe_search(index, query, search_fn=semantic_search, k=5, field=None, filters=None,
+                min_group_size=MIN_GROUP_SIZE):
+    """Search with small-group suppression: no results if fewer than 5 reviews match the filters."""
+    n = group_size(index, filters)
+    if n < min_group_size:
+        return {
+            "suppressed": True,
+            "group_size": n,
+            "results": index["passages"].head(0),
+            "message": f"Fewer than {min_group_size} reviews match these filters. "
+                       "Results are hidden to protect reviewer anonymity.",
+        }
+    return {
+        "suppressed": False,
+        "group_size": n,
+        "results": search_fn(index, query, k=k, field=field, filters=filters),
+        "message": "",
+    }
+
 
 

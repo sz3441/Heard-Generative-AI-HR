@@ -1,6 +1,7 @@
 import pandas as pd
 
 import json
+import re
 from pathlib import Path
 
 import numpy as np
@@ -22,6 +23,32 @@ def load_reviews(csv_path):
     df.loc[status.str.startswith("former"), "employment_status"] = "former"
 
     return df
+
+
+
+# deloitte demo
+# Job title -> job level. Rules are checked in order; the first match wins.
+LEVEL_RULES = [
+    ("intern", ["intern", "internship"]),
+    ("director_partner", ["partner", "principal", "director"]),
+    ("senior_manager", ["senior manager", "sr manager", "specialist master", "specialist leader"]),
+    ("manager", ["manager"]),
+    ("senior", ["senior", "sr"]),
+    ("consultant", ["consultant"]),
+    ("analyst", ["analyst", "associate", "audit assistant", "auditor", "audit staff", "bta", "tax assistant"]),
+]
+
+
+def job_level(title):
+    """Map a free-text job title to a job level for group filters."""
+    if pd.isna(title) or str(title).strip().lower() in ("", "anonymous employee"):
+        return "unknown"
+    t = str(title).lower()
+    for level, words in LEVEL_RULES:
+        if any(re.search(rf"\b{w}\b", t) for w in words):
+            return level
+    return "other"
+
 
 
 FIELDS = {"pros": "pros", "cons": "cons", "advice": "advice_to_management"}
