@@ -28,7 +28,7 @@ def test_suppression_uses_safe_search_message():
             {"suppressed": True, "results": PASSAGES, "message": "Privacy refusal."}
         ), semantic_search_fn=object(), hybrid_search_fn=object()
     )
-    assert out == {"answer": "Privacy refusal.", "citations": [], "refused": True}
+    assert out == {"answer": "Privacy refusal.", "citations": [], "refused": True, "reason": "suppressed"}
 
 
 def test_invalid_citations_are_filtered():
@@ -40,6 +40,7 @@ def test_invalid_citations_are_filtered():
     )
     assert out["citations"] == ["p:1"]
     assert not out["refused"]
+    assert out["reason"] is None
 
 
 def test_no_valid_citation_refuses():
@@ -49,7 +50,7 @@ def test_no_valid_citation_refuses():
         ), semantic_search_fn=object(), hybrid_search_fn=object(),
         generator=lambda *_: '{"answer":"Unsupported.","citations":["fake"]}',
     )
-    assert out == {"answer": DEFAULT_REFUSAL, "citations": [], "refused": True}
+    assert out == {"answer": DEFAULT_REFUSAL, "citations": [], "refused": True, "reason": "no_evidence"}
 
 
 def test_qwen_style_citation_objects_are_normalized():
@@ -113,7 +114,7 @@ def test_short_or_nonmatching_quote_is_rejected():
                 '{"answer":"Unsupported.","citation":' + repr([value]).replace("'", '"') + '}'
             ),
         )
-        assert out == {"answer": DEFAULT_REFUSAL, "citations": [], "refused": True}
+        assert out == {"answer": DEFAULT_REFUSAL, "citations": [], "refused": True, "reason": "no_evidence"}
 
 
 def test_insufficient_evidence_refuses_without_calling_generator():
@@ -129,7 +130,7 @@ def test_insufficient_evidence_refuses_without_calling_generator():
             {"suppressed": False, "results": PASSAGES.head(1), "message": ""}
         ), semantic_search_fn=object(), hybrid_search_fn=object(), generator=generator,
     )
-    assert out == {"answer": DEFAULT_REFUSAL, "citations": [], "refused": True}
+    assert out == {"answer": DEFAULT_REFUSAL, "citations": [], "refused": True, "reason": "no_evidence"}
     assert not called
 
 
@@ -148,3 +149,25 @@ def test_search_method_is_passed_to_safe_search():
         generator=lambda *_: '{"answer":"Supported.","citations":["p:1"]}',
     )
     assert observed["search_fn"] is hybrid
+
+
+def test_unrelated_retrieval_refuses_before_generation():
+    def generator(*args):
+        raise AssertionError("Unrelated passages must not reach the model")
+
+    passages = PASSAGES.assign(text=["The probation period is long.", PASSAGES.iloc[1]["text"]])
+    out = generate_cited_answer(
+        object(), "What is the orbital period of Neptune?",
+        safe_search_fn=_safe({"suppressed": False, "results": passages, "message": ""}),
+        generator=generator,
+    )
+    assert out["refused"] and out["reason"] == "no_evidence"
+
+
+def test_valid_id_for_unrelated_passage_is_not_enough():
+    out = generate_cited_answer(
+        object(), "What are the promotion criteria?",
+        safe_search_fn=_safe({"suppressed": False, "results": PASSAGES, "message": ""}),
+        generator=lambda *_: '{"answer":"Promotion criteria are unclear.","citations":["p:2"]}',
+    )
+    assert out["refused"] and out["reason"] == "no_evidence"

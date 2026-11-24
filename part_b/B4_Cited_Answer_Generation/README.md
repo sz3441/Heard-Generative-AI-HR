@@ -27,10 +27,20 @@ result = generate_cited_answer(
 The return value is:
 
 ```python
-{"answer": "...", "citations": ["brightdata:...:cons:0"], "refused": False}
+{"answer": "...", "citations": ["brightdata:...:cons:0"], "refused": False, "reason": None}}
 ```
 
 Privacy suppression returns A's `safe_search(...)["message"]` with no citations. Empty/malformed evidence, fewer than `min_evidence` usable passages (default 2), an empty answer, or no valid citation produces a generic refusal. The exact `group_size` is never returned.
+
+`reason` is `"suppressed"` for privacy suppression, `"no_evidence"` for other
+refusals (including empty questions and no valid citations), and `None` on success
+(`null` in JSON).
+
+For questions with identifiable topic words, B4 requires the retrieved passages
+and then the cited subset to cover at least half of those words, after removing
+common words and reducing inflections to stems. This catches some unrelated
+retrievals but does not establish that each claim is supported. Paraphrased
+evidence can also be missed.
 
 The validator accepts exact IDs from the current retrieval result. To tolerate the
 small generator occasionally returning a quotation instead of its ID, it may also

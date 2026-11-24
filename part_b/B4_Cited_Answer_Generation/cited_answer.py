@@ -12,6 +12,25 @@ BASE_MODEL_ID = "Qwen/Qwen2.5-0.5B-Instruct"
 DEFAULT_REFUSAL = "I don't have enough evidence in the retrieved employee feedback to answer that question."
 _CITATION_RE = re.compile(r"\[([^\[\]]+)\]")
 _MIN_QUOTE_LENGTH = 20
+_GENERIC_QUERY_WORDS = {
+    "employee", "employees", "staff", "worker", "workers", "people", "review",
+    "reviews", "feedback", "report", "reports", "mention", "say", "unhappy",
+    "concern", "concerns", "problem", "problems", "issue", "issues",
+}
+
+
+def _topic_terms(text: str) -> set[str]:
+    from nltk.stem import PorterStemmer
+    from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS
+
+    stemmer = PorterStemmer()
+    words = re.findall(r"[a-z]+", text.lower())
+    return {
+        stemmer.stem(word)
+        for word in words
+        if len(word) > 2 and word not in ENGLISH_STOP_WORDS
+        and word not in _GENERIC_QUERY_WORDS
+    }
 
 
 class LocalQwenGenerator:
@@ -123,7 +142,7 @@ def generate_cited_answer(
     A's retrieval.search implementation.
     """
     if not question or not question.strip():
-        return {"answer": DEFAULT_REFUSAL, "citations": [], "refused": True}
+        return {"answer": DEFAULT_REFUSAL, "citations": [], "refused": True, "reason": "no_evidence"}
 
     if safe_search_fn is None:
         from retrieval.search import hybrid_search, safe_search, semantic_search
@@ -152,11 +171,21 @@ def generate_cited_answer(
             "answer": str(retrieved.get("message") or DEFAULT_REFUSAL),
             "citations": [],
             "refused": True,
+            "reason": "suppressed",
         }
 
     evidence = _clean_results(retrieved.get("results"), min_evidence)
     if evidence is None:
-        return {"answer": DEFAULT_REFUSAL, "citations": [], "refused": True}
+        return {"answer": DEFAULT_REFUSAL, "citations": [], "refused": True, "reason": "no_evidence"}
+
+    question_topics = _topic_terms(question)
+    matched_topics = {
+        row.passage_id: question_topics & _topic_terms(row.text)
+        for row in evidence[["passage_id", "text"]].itertuples(index=False)
+    }
+    min_topics = (len(question_topics) + 1) // 2
+    if len(set().union(*matched_topics.values())) < min_topics:
+        return {"answer": DEFAULT_REFUSAL, "citations": [], "refused": True, "reason": "no_evidence"}
 
     evidence_lines = [
         f"[{row.passage_id}] {row.text}"
@@ -211,9 +240,10 @@ def generate_cited_answer(
                 resolved = quote_matches[0] if len(quote_matches) == 1 else None
         if resolved and resolved not in citations:
             citations.append(resolved)
-    if not answer or not citations:
-        return {"answer": DEFAULT_REFUSAL, "citations": [], "refused": True}
+    cited_topics = set().union(*(matched_topics[pid] for pid in citations))
+    if not answer or not citations or len(cited_topics) < min_topics:
+        return {"answer": DEFAULT_REFUSAL, "citations": [], "refused": True, "reason": "no_evidence"}
 
     # Strip hallucinated bracket citations from the visible answer.
     answer = _CITATION_RE.sub(lambda m: m.group(0) if m.group(1) in allowed else "", answer)
-    return {"answer": answer.strip(), "citations": citations, "refused": False}
+    return {"answer": answer.strip(), "citations": citations, "refused": False, "reason": None}
