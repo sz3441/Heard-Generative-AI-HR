@@ -1,0 +1,10 @@
+torch
+transformers
+accelerate
+pandas
+numpy
+pyarrow>=26.0.1
+sentence-transformers
+rank-bm25
+scikit-learn
+nltk
